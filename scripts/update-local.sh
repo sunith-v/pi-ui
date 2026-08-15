@@ -49,6 +49,13 @@ git diff --cached --quiet || fail
 
 git fetch --quiet upstream main || fail
 
+UPSTREAM_REVISION="$(git rev-parse upstream/main)" || fail
+CUSTOM_REVISION="$(git rev-parse "$BRANCH")" || fail
+INPUT_REVISION="${UPSTREAM_REVISION}:${CUSTOM_REVISION}"
+if [[ -f "$STATE_DIR/last-successful-input" && "$(<"$STATE_DIR/last-successful-input")" == "$INPUT_REVISION" ]]; then
+  exit 0
+fi
+
 BASE="$(git merge-base "upstream/main" "$BRANCH")" || fail
 WORKTREE="$(mktemp -d "${TMPDIR:-/tmp}/pi-ui-local-build.XXXXXX")" || fail
 git -C "$REPO" worktree add --detach "$WORKTREE" upstream/main >/dev/null || fail
@@ -62,11 +69,6 @@ while IFS= read -r commit; do
     fail
   }
 done < <(git rev-list --reverse "$BASE..$BRANCH")
-
-TARGET_REVISION="$(git -C "$WORKTREE" rev-parse HEAD)" || fail
-if [[ -f "$STATE_DIR/last-successful-revision" && "$(<"$STATE_DIR/last-successful-revision")" == "$TARGET_REVISION" ]]; then
-  exit 0
-fi
 
 cd "$WORKTREE" || fail
 /opt/homebrew/bin/deno task build || fail
@@ -87,5 +89,5 @@ if ! mv "$STAGING_DIR/Pi UI Local.app" "$APP"; then
   fail
 fi
 rm -rf "$BACKUP" "$STAGING_DIR"
-print -r -- "$TARGET_REVISION" > "$STATE_DIR/last-successful-revision"
-print -r -- "$(date '+%Y-%m-%d %H:%M:%S') updated $TARGET_REVISION"
+print -r -- "$INPUT_REVISION" > "$STATE_DIR/last-successful-input"
+print -r -- "$(date '+%Y-%m-%d %H:%M:%S') updated $UPSTREAM_REVISION + $CUSTOM_REVISION"
